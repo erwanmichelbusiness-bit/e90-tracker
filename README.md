@@ -62,7 +62,38 @@ Deux secrets GitHub (Settings → Secrets → Actions) :
 | Secret | Obtention |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | `@BotFather` → `/newbot` |
-| `TELEGRAM_CHAT_ID` | envoyer un message au bot, puis `getUpdates` |
+| `TELEGRAM_CHAT_ID` | un ou plusieurs `chat_id` **séparés par des virgules** |
+
+### Plusieurs destinataires
+
+`TELEGRAM_CHAT_ID` accepte une liste : `7193762179,7701794823`. Un seul
+secret suffit, et un `chat_id` unique continue de fonctionner à l'identique.
+
+Tous les destinataires reçoivent **le même texte**, construit une seule fois
+et envoyé dans la même boucle (~1 s d'écart, contrainte de débit Telegram).
+
+L'état enregistre la livraison **par destinataire**. Si l'envoi réussit pour
+l'un et échoue pour l'autre, l'annonce n'est pas considérée comme traitée :
+seul le destinataire manquant sera re-ciblé au run suivant. Personne ne rate
+une annonce à cause d'un échec sur un autre compte, et personne ne reçoit de
+doublon.
+
+Deux formats coexistent dans `state/seen.json` :
+
+- `"2026-08-27T07:48:36Z"` — format historique, signifie « livrée à tous ».
+  Les ~2000 entrées de l'amorce sont dans ce format et ne seront jamais
+  re-notifiées.
+- `{"vu": "...", "livre": ["chat_id", ...]}` — format actuel.
+
+### Tester un `chat_id` sans toucher à la configuration
+
+```bash
+gh workflow run tracker-e90 --repo <user>/e90-tracker \
+  -f mode=ping -f chat_id_test=7701794823 -f ping_text="mon message"
+```
+
+`chat_id_test` court-circuite entièrement `TELEGRAM_CHAT_ID` : rien n'est
+écrit dans l'état, le flux principal n'est jamais exécuté.
 
 ## Usage local
 

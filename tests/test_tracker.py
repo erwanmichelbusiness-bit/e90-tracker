@@ -91,12 +91,71 @@ class TestEtat(unittest.TestCase):
             state.sauvegarder(e, p)
             self.assertFalse(state.est_nouvelle(state.charger(p), "X"))
 
+    def test_livraison_par_destinataire(self):
+        """Un destinataire en echec doit etre re-cible, pas l'autre."""
+        erwan, nick = "7193762179", "7701794823"
+        tous = [erwan, nick]
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "seen.json")
+            e = state.charger(p)
+            self.assertEqual(state.destinataires_manquants(e, "AD", tous), tous)
+            state.marquer(e, "AD", livre_a=[erwan])
+            self.assertEqual(state.destinataires_manquants(e, "AD", tous), [nick])
+            self.assertTrue(state.deja_livre(e, "AD", erwan))
+            state.marquer(e, "AD", livre_a=[nick])
+            self.assertEqual(state.destinataires_manquants(e, "AD", tous), [])
+
+    def test_entrees_historiques_non_renvoyees(self):
+        """Le passif de l'amorce (format str) ne doit pas etre re-notifie."""
+        e = state.charger(os.path.join(tempfile.gettempdir(), "_absent.json"))
+        e["vues"]["VIEILLE"] = "2026-08-27T07:48:36Z"
+        self.assertEqual(
+            state.destinataires_manquants(e, "VIEILLE", ["1", "2"]), [])
+
+    def test_purge_gere_les_deux_formats(self):
+        e = state.charger(os.path.join(tempfile.gettempdir(), "_absent2.json"))
+        e["vues"]["A"] = "2020-01-01T00:00:00Z"
+        e["vues"]["B"] = {"vu": "2020-01-01T00:00:00Z", "livre": ["1"]}
+        e["vues"]["C"] = {"vu": "2099-01-01T00:00:00Z", "livre": []}
+        self.assertEqual(state.purger(e, jours=30), 2)
+        self.assertEqual(sorted(e["vues"]), ["C"])
+
     def test_fichier_corrompu(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "seen.json")
             with open(p, "w") as f:
                 f.write("{pas du json")
             self.assertEqual(state.charger(p)["vues"], {})
+
+
+class TestDestinataires(unittest.TestCase):
+    """Parsing de TELEGRAM_CHAT_ID : un seul secret, plusieurs destinataires."""
+
+    def _avec(self, valeur):
+        import os as _os
+        from tracker import notify
+        ancien = _os.environ.get("TELEGRAM_CHAT_ID")
+        _os.environ["TELEGRAM_CHAT_ID"] = valeur
+        try:
+            return notify.destinataires()
+        finally:
+            if ancien is None:
+                _os.environ.pop("TELEGRAM_CHAT_ID", None)
+            else:
+                _os.environ["TELEGRAM_CHAT_ID"] = ancien
+
+    def test_deux_destinataires(self):
+        self.assertEqual(self._avec("7193762179,7701794823"),
+                         ["7193762179", "7701794823"])
+
+    def test_espaces_et_vides_ignores(self):
+        self.assertEqual(self._avec(" 111 , 222 ,, "), ["111", "222"])
+
+    def test_retrocompatible_un_seul(self):
+        self.assertEqual(self._avec("7193762179"), ["7193762179"])
+
+    def test_vide(self):
+        self.assertEqual(self._avec(""), [])
 
 
 if __name__ == "__main__":

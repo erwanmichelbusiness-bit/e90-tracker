@@ -85,11 +85,15 @@ def envoyer_a(chat_id, texte):
     })
 
 
-def envoyer(texte):
-    """Envoie a TOUS les destinataires configures. Renvoie un resume agrege :
-    ok=True si au moins un envoi a reussi (un destinataire en echec ne doit
-    pas bloquer les autres ni faire perdre l'annonce pour tout le monde)."""
-    resultats = {cid: envoyer_a(cid, texte) for cid in destinataires()}
+def envoyer(texte, cibles=None):
+    """Envoie le MEME texte a chaque destinataire.
+
+    cibles=None -> tous les destinataires configures.
+    Renvoie {ok, reussites, echecs, detail}. `ok` vaut True des qu'un envoi
+    a reussi ; c'est `echecs` qui doit etre consulte pour savoir si la
+    livraison est complete."""
+    resultats = {cid: envoyer_a(cid, texte)
+                 for cid in (cibles if cibles is not None else destinataires())}
     reussites = [cid for cid, r in resultats.items() if r.get("ok")]
     echecs = [cid for cid, r in resultats.items() if not r.get("ok")]
     return {

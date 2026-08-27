@@ -176,24 +176,42 @@ def main():
                     MAX_ENVOIS_PAR_RUN))
                 break
             texte = notify.formater(a, s, v)
+            tous = notify.destinataires()
+            manquants = state.destinataires_manquants(etat, a["guid"], tous)
             if args.dry_run or not notify.disponible():
-                log("  [SIMULATION] {} score={} {}".format(v, s, a["titre"][:60]))
+                log("  [SIMULATION] {} score={} -> {} destinataire(s) : {}".format(
+                    v, s, len(manquants), a["titre"][:50]))
                 envoyes += 1
+            elif not manquants:
+                state.marquer(etat, a["guid"])
             else:
-                rep = notify.envoyer(texte)
-                if rep.get("ok"):
-                    state.marquer(etat, a["guid"])
+                rep = notify.envoyer(texte, cibles=manquants)
+                if rep["reussites"]:
+                    # N'enregistre QUE les livraisons reellement confirmees :
+                    # un destinataire en echec repassera au prochain run et
+                    # recevra la meme annonce, avec le meme contenu.
+                    state.marquer(etat, a["guid"], livre_a=rep["reussites"])
                     envoyes += 1
-                    log("  [ENVOYE] {} score={} {}".format(v, s, a["titre"][:60]))
-                else:
-                    log("  [ECHEC TELEGRAM] {}".format(rep.get("description")))
+                    log("  [ENVOYE] {} score={} -> {} : {}".format(
+                        v, s, ",".join(rep["reussites"]), a["titre"][:50]))
+                if rep["echecs"]:
+                    log("  [ECHEC PARTIEL] non livre a {} : {} (nouvel essai au"
+                        " prochain run)".format(",".join(rep["echecs"]),
+                                                a["titre"][:50]))
                 time.sleep(PAUSE_ENTRE_ENVOIS)
-        # Tout est marque comme vu, SAUF la file d'attente non envoyee :
-        # ces annonces doivent repasser au prochain run.
+        # Tout est marque comme vu, SAUF :
+        #  - la file d'attente non envoyee (garde-fou MAX_ENVOIS_PAR_RUN)
+        #  - les annonces pas encore livrees a tous les destinataires
+        # Ces deux categories doivent repasser au prochain run.
+        tous = notify.destinataires()
         en_attente = {x[2]["guid"] for x in a_envoyer[envoyes:]}
         for a in vehicules + pieces:
-            if a["guid"] not in en_attente:
-                state.marquer(etat, a["guid"])
+            if a["guid"] in en_attente:
+                continue
+            if state.destinataires_manquants(etat, a["guid"], tous) and \
+                    any(a["guid"] == x[2]["guid"] for x in a_envoyer):
+                continue
+            state.marquer(etat, a["guid"])
 
     purges = state.purger(etat)
     etat["derniere_execution"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
