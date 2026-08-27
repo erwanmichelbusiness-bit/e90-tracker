@@ -1,0 +1,46 @@
+name: tracker-e90
+
+on:
+  schedule:
+    # Plafond theorique 5 min ; GitHub honore ~1 creneau sur 3 (mesure).
+    # La source elle-meme a 2-8 h de latence, donc viser plus serre
+    # n'apporterait rien et solliciterait Google inutilement.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: tracker-e90
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Collecte, scoring et notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py
+
+      - name: Persistance de l'etat
+        run: |
+          git config user.name  "tracker-e90"
+          git config user.email "tracker-e90@users.noreply.github.com"
+          if [ -n "$(git status --porcelain state/)" ]; then
+            git add state/
+            git commit -m "state: $(date -u +%FT%TZ)"
+            git pull --rebase --autostash origin main || true
+            git push
+          else
+            echo "aucun changement d'etat"
+          fi
