@@ -52,6 +52,30 @@ def enrichir(a):
     return a
 
 
+def ping():
+    """Envoi de controle : verifie le jeton, le chat_id et le rendu du message."""
+    if not notify.disponible():
+        log("ERREUR : TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID absent.")
+        return 1
+    horodatage = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    exemple = {
+        "titre": "BMW 325i E91 Touring 218ch 3.0 essence",
+        "annee": 2009, "prix": 11980, "kilometrage": 146050,
+        "carburant": "essence", "source": "Leboncoin",
+        "lien": "https://github.com/erwanmichelbusiness-bit/e90-tracker",
+    }
+    texte = ("\u2705 <b>e90-tracker op\u00e9rationnel</b>\n"
+             "Contr\u00f4le du " + horodatage + "\n"
+             "Voici \u00e0 quoi ressemblera une vraie alerte :\n\n"
+             + notify.formater(exemple, 117, "NOTIFIER"))
+    rep = notify.envoyer(texte)
+    if rep.get("ok"):
+        log("Message de controle envoye.")
+        return 0
+    log("ECHEC : {}".format(rep.get("description")))
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
@@ -60,7 +84,12 @@ def main():
                     help="3 requetes seulement, pour un essai rapide")
     ap.add_argument("--force-amorce", action="store_true",
                     help="refait l'amorce (re-marque tout comme vu)")
+    ap.add_argument("--ping", action="store_true",
+                    help="envoie un unique message de controle et sort")
     args = ap.parse_args()
+
+    if args.ping:
+        return ping()
 
     debut = time.time()
     log("=== Tracker E90 — {} ===".format(

@@ -7,6 +7,12 @@ on:
     # n'apporterait rien et solliciterait Google inutilement.
     - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode d'execution"
+        type: choice
+        default: normal
+        options: [normal, ping, force-amorce]
 
 concurrency:
   group: tracker-e90
@@ -30,7 +36,13 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python run.py
+          MODE: ${{ inputs.mode }}
+        run: |
+          case "$MODE" in
+            ping)         python run.py --ping ;;
+            force-amorce) python run.py --force-amorce ;;
+            *)            python run.py ;;
+          esac
 
       - name: Persistance de l'etat
         run: |
