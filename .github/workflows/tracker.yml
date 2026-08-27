@@ -13,6 +13,14 @@ on:
         type: choice
         default: normal
         options: [normal, ping, force-amorce]
+      chat_id_test:
+        description: "Ping mode uniquement : teste CE chat_id, sans toucher au secret TELEGRAM_CHAT_ID"
+        type: string
+        default: ""
+      ping_text:
+        description: "Ping mode uniquement : texte personnalise (sinon message de controle standard)"
+        type: string
+        default: ""
 
 concurrency:
   group: tracker-e90
@@ -37,9 +45,16 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MODE: ${{ inputs.mode }}
+          CHAT_ID_TEST: ${{ inputs.chat_id_test }}
+          PING_TEXT: ${{ inputs.ping_text }}
         run: |
           case "$MODE" in
-            ping)         python run.py --ping ;;
+            ping)
+              ARGS=(--ping)
+              [ -n "$CHAT_ID_TEST" ] && ARGS=(--ping-chat-id "$CHAT_ID_TEST")
+              [ -n "$PING_TEXT" ] && ARGS+=(--ping-text "$PING_TEXT")
+              python run.py "${ARGS[@]}"
+              ;;
             force-amorce) python run.py --force-amorce ;;
             *)            python run.py ;;
           esac

@@ -14,18 +14,26 @@ import urllib.request
 API = "https://api.telegram.org/bot{token}/{methode}"
 
 
-def _config():
-    return os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+def _token():
+    return os.environ.get("TELEGRAM_BOT_TOKEN")
+
+
+def destinataires():
+    """Liste des chat_id configures (TELEGRAM_CHAT_ID, separes par des virgules).
+
+    Un seul secret suffit pour plusieurs destinataires : c'est le choix qui
+    modifie le moins l'existant (pas de nouveau secret a introduire).
+    """
+    brut = os.environ.get("TELEGRAM_CHAT_ID", "")
+    return [c.strip() for c in brut.split(",") if c.strip()]
 
 
 def disponible():
-    token, chat = _config()
-    return bool(token and chat)
+    return bool(_token()) and bool(destinataires())
 
 
 def _appeler(methode, params):
-    token, _ = _config()
-    url = API.format(token=token, methode=methode)
+    url = API.format(token=_token(), methode=methode)
     donnees = urllib.parse.urlencode(params).encode()
     try:
         with urllib.request.urlopen(urllib.request.Request(url, data=donnees), timeout=20) as r:
@@ -66,11 +74,27 @@ def formater(annonce, score, verdict_):
     return "\n".join(lignes)
 
 
-def envoyer(texte):
-    _, chat = _config()
+def envoyer_a(chat_id, texte):
+    """Envoie a UN destinataire explicite. Ne consulte pas destinataires() :
+    sert au test isole d'un chat_id, independamment de la liste configuree."""
     return _appeler("sendMessage", {
-        "chat_id": chat,
+        "chat_id": chat_id,
         "text": texte,
         "parse_mode": "HTML",
         "disable_web_page_preview": "false",
     })
+
+
+def envoyer(texte):
+    """Envoie a TOUS les destinataires configures. Renvoie un resume agrege :
+    ok=True si au moins un envoi a reussi (un destinataire en echec ne doit
+    pas bloquer les autres ni faire perdre l'annonce pour tout le monde)."""
+    resultats = {cid: envoyer_a(cid, texte) for cid in destinataires()}
+    reussites = [cid for cid, r in resultats.items() if r.get("ok")]
+    echecs = [cid for cid, r in resultats.items() if not r.get("ok")]
+    return {
+        "ok": bool(reussites),
+        "reussites": reussites,
+        "echecs": echecs,
+        "detail": resultats,
+    }

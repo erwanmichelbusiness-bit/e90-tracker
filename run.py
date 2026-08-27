@@ -52,27 +52,56 @@ def enrichir(a):
     return a
 
 
-def ping():
-    """Envoi de controle : verifie le jeton, le chat_id et le rendu du message."""
-    if not notify.disponible():
+def ping(chat_id_cible=None, texte_force=None):
+    """Envoi de controle.
+
+    Sans --ping-chat-id : envoie a TOUS les destinataires configures
+    (TELEGRAM_CHAT_ID) le message de controle standard.
+
+    Avec --ping-chat-id : envoie UNIQUEMENT a ce chat_id, en ignorant
+    totalement destinataires(). Sert a valider un chat_id avant de
+    l'ajouter a la configuration reelle -- aucune ecriture d'etat, aucun
+    passage par main(), donc aucune notification "reelle" declenchee.
+    """
+    token_ok = bool(notify._token())
+    if chat_id_cible:
+        if not token_ok:
+            log("ERREUR : TELEGRAM_BOT_TOKEN absent.")
+            return 1
+    elif not notify.disponible():
         log("ERREUR : TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID absent.")
         return 1
-    horodatage = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-    exemple = {
-        "titre": "BMW 325i E91 Touring 218ch 3.0 essence",
-        "annee": 2009, "prix": 11980, "kilometrage": 146050,
-        "carburant": "essence", "source": "Leboncoin",
-        "lien": "https://github.com/erwanmichelbusiness-bit/e90-tracker",
-    }
-    texte = ("\u2705 <b>e90-tracker op\u00e9rationnel</b>\n"
-             "Contr\u00f4le du " + horodatage + "\n"
-             "Voici \u00e0 quoi ressemblera une vraie alerte :\n\n"
-             + notify.formater(exemple, 117, "NOTIFIER"))
+
+    if texte_force:
+        texte = texte_force
+    else:
+        horodatage = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+        exemple = {
+            "titre": "BMW 325i E91 Touring 218ch 3.0 essence",
+            "annee": 2009, "prix": 11980, "kilometrage": 146050,
+            "carburant": "essence", "source": "Leboncoin",
+            "lien": "https://github.com/erwanmichelbusiness-bit/e90-tracker",
+        }
+        texte = ("\u2705 <b>e90-tracker op\u00e9rationnel</b>\n"
+                 "Contr\u00f4le du " + horodatage + "\n"
+                 "Voici \u00e0 quoi ressemblera une vraie alerte :\n\n"
+                 + notify.formater(exemple, 117, "NOTIFIER"))
+
+    if chat_id_cible:
+        rep = notify.envoyer_a(chat_id_cible, texte)
+        if rep.get("ok"):
+            log("Message de test envoye au chat_id {}.".format(chat_id_cible))
+            return 0
+        log("ECHEC pour {} : {}".format(chat_id_cible, rep.get("description")))
+        return 1
+
     rep = notify.envoyer(texte)
-    if rep.get("ok"):
-        log("Message de controle envoye.")
+    if rep["ok"]:
+        log("Message de controle envoye a : {}".format(", ".join(rep["reussites"])))
+        if rep["echecs"]:
+            log("  ECHEC pour : {}".format(", ".join(rep["echecs"])))
         return 0
-    log("ECHEC : {}".format(rep.get("description")))
+    log("ECHEC pour tous les destinataires : {}".format(rep["detail"]))
     return 1
 
 
@@ -86,10 +115,14 @@ def main():
                     help="refait l'amorce (re-marque tout comme vu)")
     ap.add_argument("--ping", action="store_true",
                     help="envoie un unique message de controle et sort")
+    ap.add_argument("--ping-chat-id", metavar="ID", default=None,
+                    help="teste UN chat_id precis, sans toucher a la config reelle")
+    ap.add_argument("--ping-text", metavar="TEXTE", default=None,
+                    help="texte personnalise pour --ping / --ping-chat-id")
     args = ap.parse_args()
 
-    if args.ping:
-        return ping()
+    if args.ping or args.ping_chat_id:
+        return ping(chat_id_cible=args.ping_chat_id, texte_force=args.ping_text)
 
     debut = time.time()
     log("=== Tracker E90 — {} ===".format(
